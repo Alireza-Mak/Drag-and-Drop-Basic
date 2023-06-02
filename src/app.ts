@@ -252,13 +252,13 @@ class ProjectInput extends Component<HTMLDivElement, HTMLFormElement> {
       value: enteredTiltle,
       required: true,
       minLength: 4,
-      maxLength: 12,
+      maxLength: 40,
     };
     const descriptionValidate: validateType = {
       value: enteredDescription,
       required: true,
       minLength: 4,
-      maxLength: 12,
+      maxLength: 40,
     };
     const peopleValidate: validateType = {
       value: enteredProple,
