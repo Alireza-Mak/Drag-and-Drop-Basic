@@ -181,13 +181,13 @@ class ProjectInput extends Component {
             value: enteredTiltle,
             required: true,
             minLength: 4,
-            maxLength: 12,
+            maxLength: 40,
         };
         const descriptionValidate = {
             value: enteredDescription,
             required: true,
             minLength: 4,
-            maxLength: 12,
+            maxLength: 40,
         };
         const peopleValidate = {
             value: enteredProple,
