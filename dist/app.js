@@ -122,6 +122,29 @@ class ProjectState extends StateComponent {
 class ProjectItem extends Component {
     constructor(hostId, project) {
         super('single-project', hostId, false, project.id);
+        this.TouchMoveHandler = (event) => {
+            event.preventDefault();
+            if (ProjectItem.selectedItem) {
+                const touch = event.touches[0];
+                const xPos = touch.clientX;
+                const yPos = touch.clientY;
+                ProjectItem.selectedItem.style.left = xPos + 'px';
+                ProjectItem.selectedItem.style.top = yPos + 'px';
+                const activeProjectsList = document.getElementById('active-projects-list');
+                const finishedProjectsList = document.getElementById('finished-projects-list');
+                activeProjectsList.classList.remove('droppable');
+                finishedProjectsList.classList.remove('droppable');
+                const target = document.elementFromPoint(xPos, yPos);
+                const isTargetActive = activeProjectsList.contains(target);
+                const isTargetFinished = finishedProjectsList.contains(target);
+                if (isTargetActive) {
+                    activeProjectsList.classList.add('droppable');
+                }
+                else if (isTargetFinished) {
+                    finishedProjectsList.classList.add('droppable');
+                }
+            }
+        };
         this.project = project;
         this.configure();
         this.renderContent();
@@ -133,12 +156,39 @@ class ProjectItem extends Component {
         return `${this.project.people.toString()} people assigned.`;
     }
     dragStartHandler(event) {
-        event.dataTransfer.setData('text/plain', this.project.id);
-        event.dataTransfer.effectAllowed = 'move';
+        if (event instanceof DragEvent) {
+            event.dataTransfer.setData('text/plain', this.project.id);
+            event.dataTransfer.effectAllowed = 'move';
+        }
+        if (event instanceof TouchEvent) {
+            const element = event.target;
+            if (element.tagName === 'BUTTON') {
+            }
+            else if (element.tagName !== 'LI') {
+                const ul = element.parentElement.parentElement.id.split('-')[0];
+                ProjectItem.status = ul;
+                ProjectItem.selectedItem = element.parentElement;
+            }
+            else {
+                const ul = element.parentElement.id.split('-')[0];
+                ProjectItem.status = ul;
+                ProjectItem.selectedItem = element;
+            }
+            if (ProjectItem.selectedItem) {
+                ProjectItem.selectedItem.style.height =
+                    ProjectItem.selectedItem.clientHeight.toString();
+                ProjectItem.selectedItem.style.width =
+                    ProjectItem.selectedItem.clientWidth.toString();
+                ProjectItem.selectedItem.style.position = 'fixed';
+                ProjectItem.selectedItem.style.zIndex = '-10';
+            }
+        }
     }
     dragEndHandler(_) { }
     configure() {
         this.element.addEventListener('dragstart', this.dragStartHandler);
+        this.element.addEventListener('touchstart', this.dragStartHandler);
+        this.element.addEventListener('touchmove', this.TouchMoveHandler);
         this.element.addEventListener('dragend', this.dragEndHandler);
         this.element
             .querySelector('button')
@@ -238,8 +288,41 @@ class ProjectList extends Component {
         }
     }
     dropHandler(event) {
-        const prjId = event.dataTransfer.getData('text/plain');
-        projectState.moveProject(prjId, this.type === 'active' ? ProjectStatus.ACTIVE : ProjectStatus.FINISHIED);
+        if (event instanceof DragEvent) {
+            const prjId = event.dataTransfer.getData('text/plain');
+            projectState.moveProject(prjId, this.type === 'active' ? ProjectStatus.ACTIVE : ProjectStatus.FINISHIED);
+        }
+        if (event instanceof TouchEvent) {
+            if (ProjectItem.selectedItem) {
+                var ulElements = document.querySelectorAll('ul');
+                ulElements.forEach(function (ul) {
+                    ul.classList.remove('droppable');
+                });
+                var targetList = document.elementFromPoint(event.changedTouches[0].clientX, event.changedTouches[0].clientY);
+                if (targetList && targetList.tagName === 'UL') {
+                    targetList.appendChild(ProjectItem.selectedItem);
+                    const prjId = ProjectItem.selectedItem.id;
+                    const status = ProjectItem.status === 'active'
+                        ? ProjectStatus.FINISHIED
+                        : ProjectStatus.ACTIVE;
+                    projectState.moveProject(prjId, status);
+                }
+                if (targetList && targetList.tagName === 'LI') {
+                    targetList.parentElement.insertBefore(ProjectItem.selectedItem, targetList.nextSibling);
+                    const prjId = ProjectItem.selectedItem.id;
+                    const status = ProjectItem.status === 'active'
+                        ? ProjectStatus.FINISHIED
+                        : ProjectStatus.ACTIVE;
+                    projectState.moveProject(prjId, status);
+                }
+                ProjectItem.selectedItem.style.left = '';
+                ProjectItem.selectedItem.style.top = '';
+                ProjectItem.selectedItem.style.height = '';
+                ProjectItem.selectedItem.style.width = '';
+                ProjectItem.selectedItem.style.position = '';
+                ProjectItem.selectedItem.style.zIndex = '';
+            }
+        }
     }
     dragLeaveHandler(_) {
         const ulElement = this.element.querySelector('ul');
@@ -247,6 +330,7 @@ class ProjectList extends Component {
     }
     configure() {
         this.element.addEventListener('dragover', this.dragOverHandler);
+        this.element.addEventListener('touchend', this.dropHandler);
         this.element.addEventListener('drop', this.dropHandler);
         this.element.addEventListener('dragleave', this.dragLeaveHandler);
         projectState.addListener((projects) => {

@@ -57,12 +57,13 @@ function validate(validatableInput: validateType) {
 
 // Drag and Drop Interface
 interface Draggable {
-  dragStartHandler: (event: DragEvent) => void;
+  dragStartHandler: (event: DragEvent | TouchEvent) => void;
+  TouchMoveHandler: (event: TouchEvent) => void;
   dragEndHandler: (event: DragEvent) => void;
 }
 interface DragTarget {
   dragOverHandler: (event: DragEvent) => void;
-  dropHandler: (event: DragEvent) => void;
+  dropHandler: (event: DragEvent | TouchEvent) => void;
   dragLeaveHandler: (event: DragEvent) => void;
 }
 
@@ -180,6 +181,8 @@ class ProjectItem
   implements Draggable
 {
   private project: Project;
+  static selectedItem: HTMLLIElement | null;
+  static status: string;
   constructor(hostId: string, project: Project) {
     super('single-project', hostId, false, project.id);
     this.project = project;
@@ -193,15 +196,79 @@ class ProjectItem
     return `${this.project.people.toString()} people assigned.`;
   }
   @Autobind
-  dragStartHandler(event: DragEvent): void {
-    event.dataTransfer!.setData('text/plain', this.project.id);
-    event.dataTransfer!.effectAllowed = 'move';
+  dragStartHandler(event: DragEvent | TouchEvent): void {
+    if (event instanceof DragEvent) {
+      event.dataTransfer!.setData('text/plain', this.project.id);
+      event.dataTransfer!.effectAllowed = 'move';
+    }
+    if (event instanceof TouchEvent) {
+      const element = event.target as HTMLElement;
+      if (element.tagName === 'BUTTON') {
+      } else if (element.tagName !== 'LI') {
+        const ul = element.parentElement!.parentElement!.id.split('-')[0];
+        ProjectItem.status = ul;
+        ProjectItem.selectedItem = element.parentElement as HTMLLIElement;
+      } else {
+        const ul = element.parentElement!.id.split('-')[0];
+        ProjectItem.status = ul;
+        ProjectItem.selectedItem = element as HTMLLIElement;
+      }
+      if (ProjectItem.selectedItem) {
+        ProjectItem.selectedItem.style.height =
+          ProjectItem.selectedItem.clientHeight.toString();
+        ProjectItem.selectedItem.style.width =
+          ProjectItem.selectedItem.clientWidth.toString();
+        ProjectItem.selectedItem.style.position = 'fixed';
+        ProjectItem.selectedItem.style.zIndex = '-10';
+      }
+    }
   }
+
+  TouchMoveHandler = (event: TouchEvent) => {
+    event.preventDefault(); // Prevent default touchmove behavior
+    if (ProjectItem.selectedItem) {
+      const touch = event.touches[0];
+
+      // Update the xPos and yPos with the touch position
+      const xPos = touch.clientX;
+      const yPos = touch.clientY;
+
+      // Update the position of the element
+      ProjectItem.selectedItem.style.left = xPos + 'px';
+      ProjectItem.selectedItem.style.top = yPos + 'px';
+
+      const activeProjectsList = document.getElementById(
+        'active-projects-list'
+      );
+      const finishedProjectsList = document.getElementById(
+        'finished-projects-list'
+      );
+
+      activeProjectsList!.classList.remove('droppable');
+      finishedProjectsList!.classList.remove('droppable');
+
+      // Find the target element based on the touch position
+      const target = document.elementFromPoint(xPos, yPos);
+
+      // Check if the target lists are the active projects list and finished projects list
+      const isTargetActive = activeProjectsList!.contains(target);
+      const isTargetFinished = finishedProjectsList!.contains(target);
+
+      // Change the style of the target lists
+      if (isTargetActive) {
+        activeProjectsList!.classList.add('droppable');
+      } else if (isTargetFinished) {
+        finishedProjectsList!.classList.add('droppable');
+      }
+    }
+  };
 
   dragEndHandler(_: DragEvent): void {}
 
   configure(): void {
     this.element.addEventListener('dragstart', this.dragStartHandler);
+    this.element.addEventListener('touchstart', this.dragStartHandler);
+    this.element.addEventListener('touchmove', this.TouchMoveHandler);
     this.element.addEventListener('dragend', this.dragEndHandler);
     this.element
       .querySelector('button')!
@@ -316,12 +383,56 @@ class ProjectList
     }
   }
   @Autobind
-  dropHandler(event: DragEvent): void {
-    const prjId = event.dataTransfer!.getData('text/plain');
-    projectState.moveProject(
-      prjId,
-      this.type === 'active' ? ProjectStatus.ACTIVE : ProjectStatus.FINISHIED
-    );
+  dropHandler(event: DragEvent | TouchEvent): void {
+    if (event instanceof DragEvent) {
+      const prjId = event.dataTransfer!.getData('text/plain');
+      projectState.moveProject(
+        prjId,
+        this.type === 'active' ? ProjectStatus.ACTIVE : ProjectStatus.FINISHIED
+      );
+    }
+    if (event instanceof TouchEvent) {
+      if (ProjectItem.selectedItem) {
+        var ulElements = document.querySelectorAll('ul');
+        ulElements.forEach(function (ul) {
+          ul.classList.remove('droppable');
+        });
+        var targetList = document.elementFromPoint(
+          event.changedTouches[0].clientX,
+          event.changedTouches[0].clientY
+        ) as HTMLElement;
+        // Check if the target is a <ul> element
+        if (targetList && targetList.tagName === 'UL') {
+          targetList.appendChild(ProjectItem.selectedItem); // Move the selected <li> element to the target <ul>
+          const prjId = ProjectItem.selectedItem.id;
+          const status =
+            ProjectItem.status === 'active'
+              ? ProjectStatus.FINISHIED
+              : ProjectStatus.ACTIVE;
+          projectState.moveProject(prjId, status);
+        }
+        // Check if the target is a <li> element
+        if (targetList && targetList.tagName === 'LI') {
+          targetList.parentElement!.insertBefore(
+            ProjectItem.selectedItem,
+            targetList.nextSibling
+          );
+          const prjId = ProjectItem.selectedItem.id;
+          const status =
+            ProjectItem.status === 'active'
+              ? ProjectStatus.FINISHIED
+              : ProjectStatus.ACTIVE;
+          projectState.moveProject(prjId, status);
+        }
+        // Reset the position of the selected <li> element
+        ProjectItem.selectedItem.style.left = '';
+        ProjectItem.selectedItem.style.top = '';
+        ProjectItem.selectedItem.style.height = '';
+        ProjectItem.selectedItem.style.width = '';
+        ProjectItem.selectedItem.style.position = '';
+        ProjectItem.selectedItem.style.zIndex = '';
+      }
+    }
   }
 
   @Autobind
@@ -331,6 +442,7 @@ class ProjectList
   }
   configure(): void {
     this.element.addEventListener('dragover', this.dragOverHandler);
+    this.element.addEventListener('touchend', this.dropHandler);
     this.element.addEventListener('drop', this.dropHandler);
     this.element.addEventListener('dragleave', this.dragLeaveHandler);
     projectState.addListener((projects: Project[]) => {
